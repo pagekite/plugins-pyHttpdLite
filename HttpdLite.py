@@ -50,6 +50,8 @@ class RequestHandler(SimpleXMLRPCRequestHandler):
 
   def sendStdHdrs(self, header_list=[], cachectrl='private',
                                         mimetype='text/html'):
+    if not mimetype:
+      mimetype = 'application/octet-stream'
     if mimetype.startswith('text/') and ';' not in mimetype:
       mimetype += '; charset=utf-8'
     self.send_header('Cache-Control', cachectrl)
@@ -121,6 +123,9 @@ class RequestHandler(SimpleXMLRPCRequestHandler):
   def do_DELETE(self):
     self.do_POST(command='DELETE')
 
+  def header(self, name, default=None):
+    return self.headers.get(name) or self.headers.get(name.lower()) or default
+
   def do_POST(self, command='POST'):
     (scheme, netloc, path, params, query, frag) = urlparse(self.path)
     qs = parse_qs(query)
@@ -130,7 +135,7 @@ class RequestHandler(SimpleXMLRPCRequestHandler):
     self.old_rfile = self.rfile
     try:
       # First, buffer the POST data to a file...
-      clength = cleft = int(self.headers.get('content-length'))
+      clength = cleft = int(self.header('Content-Length'))
       while cleft > 0:
         rbytes = min(64*1024, cleft)
         self.post_data.write(self.rfile.read(rbytes))
@@ -140,7 +145,7 @@ class RequestHandler(SimpleXMLRPCRequestHandler):
       self.post_data.seek(0)
       self.rfile = self.post_data
 
-      ctype, pdict = cgi.parse_header(self.headers.get('content-type'))
+      ctype, pdict = cgi.parse_header(self.header('Content-Type', ''))
       if ctype == 'multipart/form-data':
         self.post_data.seek(0)
         posted = cgi.parse_multipart(self.rfile, pdict)
