@@ -115,10 +115,17 @@ class RequestHandler(SimpleXMLRPCRequestHandler):
       print '%s' % traceback.format_exc()
       self.sendResponse('<h1>Internal Error</h1>\n', code=500, msg='Error')
 
+  def do_PUT(self):
+    self.do_POST(command='PUT')
+
+  def do_DELETE(self):
+    self.do_POST(command='DELETE')
+
   def do_POST(self, command='POST'):
     (scheme, netloc, path, params, query, frag) = urlparse(self.path)
     qs = parse_qs(query)
 
+    self.command = command
     self.post_data = tempfile.TemporaryFile()
     self.old_rfile = self.rfile
     try:
@@ -144,11 +151,15 @@ class RequestHandler(SimpleXMLRPCRequestHandler):
                            "string (%s bytes).") % clength)
         posted = cgi.parse_qs(self.rfile.read(clength), 1)
 
-      else:
+      elif command == 'POST':
         # We wrap the XMLRPC request handler in _BEGIN/_END in order to
         # expose the request environment to the RPC functions.
         rci = self.server.xmlrpc
         return rci._END(SimpleXMLRPCRequestHandler.do_POST(rci._BEGIN(self)))
+
+      else:
+        posted = {}
+        posted[command.upper()] = self.rfile.read(clength)
 
       self.post_data.seek(0)
     except:
