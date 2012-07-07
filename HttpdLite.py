@@ -22,6 +22,7 @@
 ################################################################################
 #
 import cgi
+import os
 import socket
 import tempfile
 import threading
@@ -32,6 +33,30 @@ from urlparse import urlparse, parse_qs
 import Cookie
 import SocketServer
 from SimpleXMLRPCServer import SimpleXMLRPCServer, SimpleXMLRPCRequestHandler
+
+
+def GuessMimeType(path):
+  if '.' in os.path.basename(path):
+    ext = path.split('.')[-1].lower()
+    if ext in ('jpg', 'jpeg'):
+      return 'image/jpeg'
+    elif ext in ('png', 'gif'):
+      return 'image/%s' % ext
+    elif ext in ('htm', 'html'):
+      return 'text/html'
+    elif ext in ('css', ):
+      return 'text/css'
+    elif ext in ('js', ):
+      return 'text/javascript'
+    elif ext in ('json', ):
+      return 'application/json'
+    elif ext in ('c', 'cfg', 'conf', 'cpp', 'csv',
+                 'h', 'hpp', 'log', 'md', 'me',
+                 'py', 'rb', 'rc', 'txt'):
+      return 'text/plain'
+    else:
+      return 'application/octet-stream'
+  return 'text/plain'
 
 
 class RequestHandler(SimpleXMLRPCRequestHandler):
