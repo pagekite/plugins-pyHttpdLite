@@ -73,6 +73,20 @@ class RequestHandler(SimpleXMLRPCRequestHandler):
   def end_headers(self):
     self.wfile.write('\r\n')
 
+  def address_string(self):
+    addr = self.header('X-Forwarded-For')
+    proto = self.header('X-Forwarded-Proto')
+    lasthop = SimpleXMLRPCRequestHandler.address_string(self)
+    if addr:
+      if addr.startswith('::ffff:'):
+        addr = addr[7:]
+      if proto == 'https':
+        return '%s/ssl/%s' % (addr, lasthop)
+      else:
+        return '/'.join([addr, lasthop])
+    else:
+      return lasthop
+
   def sendStdHdrs(self, header_list=[], cachectrl='private',
                                         mimetype='text/html'):
     if not mimetype:
