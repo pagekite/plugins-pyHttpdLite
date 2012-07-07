@@ -37,22 +37,28 @@ from SimpleXMLRPCServer import SimpleXMLRPCServer, SimpleXMLRPCRequestHandler
 
 def GuessMimeType(path):
   if '.' in os.path.basename(path):
-    ext = path.split('.')[-1].lower()
+    if path.endswith('.gz'):
+      try:
+        ext = '.'.join(path.split('.')[-2:]).lower()
+      except IndexError:
+        ext = path.split('.')[-1].lower()
+    else:
+      ext = path.split('.')[-1].lower()
     if ext in ('jpg', 'jpeg'):
       return 'image/jpeg'
     elif ext in ('png', 'gif'):
       return 'image/%s' % ext
-    elif ext in ('htm', 'html'):
+    elif ext in ('htm', 'html', 'html.gz', 'htm.gz'):
       return 'text/html'
-    elif ext in ('css', ):
+    elif ext in ('css', 'css.gz'):
       return 'text/css'
-    elif ext in ('js', ):
+    elif ext in ('js', 'js.gz'):
       return 'text/javascript'
-    elif ext in ('json', ):
+    elif ext in ('json', 'json.gz'):
       return 'application/json'
-    elif ext in ('c', 'cfg', 'conf', 'cpp', 'csv',
-                 'h', 'hpp', 'log', 'md', 'me',
-                 'py', 'rb', 'rc', 'txt'):
+    elif ext.split('.')[0] in ('c', 'cfg', 'conf', 'cpp', 'csv',
+                               'h', 'hpp', 'log', 'md', 'me',
+                               'py', 'rb', 'rc', 'txt'):
       return 'text/plain'
     else:
       return 'application/octet-stream'
