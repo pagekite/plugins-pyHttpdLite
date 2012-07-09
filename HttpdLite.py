@@ -303,9 +303,11 @@ class AuthHandler:
 
   def doOauth2(self, oauth2, req, path, qs, posted, cookies):
     code = qs.get('code', [None])[0]
+    state = qs.get('state', [''])[0]
     args = {
       'client_id': oauth2['client_id'], 
       'redirect_uri': req.absolute_url(),
+      'state': state
     }
     if code:
       args.update({
