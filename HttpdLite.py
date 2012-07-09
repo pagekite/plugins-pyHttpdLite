@@ -22,12 +22,15 @@
 ################################################################################
 #
 import cgi
+import hashlib
+import hmac
 import os
 import socket
 import tempfile
 import threading
 import time
 import traceback
+import urllib
 from urlparse import urlparse, parse_qs
 
 import Cookie
@@ -92,6 +95,11 @@ class RequestHandler(SimpleXMLRPCRequestHandler):
         return '/'.join([addr, lasthop])
     else:
       return lasthop
+
+  def absolute_url(self):
+    return '%s://%s%s' % (self.header('X-Forwarded-Proto', 'http'),
+                          self.header('Host', 'localhost'),
+                          self.path)
 
   def sendStdHdrs(self, header_list=[], cachectrl='private',
                                         mimetype='text/html'):
@@ -237,9 +245,91 @@ class RequestHandler(SimpleXMLRPCRequestHandler):
 
   def handleHttpRequest(self, scheme, netloc, path,
                               params, query, frag, qs, posted, cookies):
+    auth_handler = self.server.auth_handler
+    if auth_handler:
+      self.auth_info = None
+      rv = auth_handler.authHttpRequest(self, path, qs, posted, cookies)
+      if rv is not None:
+        return rv
     return self.server.boss.handleHttpRequest(self, scheme, netloc, path,
                                               params, query, frag,
                                               qs, posted, cookies)
+
+
+class AuthHandler:
+  """Base class for handling OAuth-type authentication flows."""
+
+  def __init__(self):
+    self.twitter = {
+      'key': '',
+      'callback': None
+    }
+    self.google = {
+      'name': 'Google',
+      'auth_url': 'https://accounts.google.com/o/oauth2/auth?response_type=code&scope=https://www.googleapis.com/auth/userinfo.profile&',
+      'token_url': 'https://www.googleapis.com/oauth2/v1/tokeninfo?',
+      'profile_url': 'https://www.googleapis.com/oauth2/v1/userinfo?access_token=',
+      'client_id': '',
+      'client_secret': ''
+    }
+    self.facebook = {
+      'name': 'Facebook',
+      'auth_url': 'https://graph.facebook.com/oauth/authorize?',
+      'token_url': 'https://graph.facebook.com/oauth/access_token?',
+      'graph_url': 'https://graph.facebook.com/me?',
+      'client_id': '',
+      'client_secret': ''
+    }
+    self.oauth2 = {
+      'google': self.google,
+      'facebook': self.facebook
+    }
+
+  def authHttpRequest(self, req, path, qs, posted, cookies):
+    if not path.startswith('/_authlite/'):
+      return None
+
+    for provider in self.oauth2:
+      if path.startswith('/_authlite/'+provider):
+        oauth2 = self.oauth2[provider]
+        if oauth2['client_id']:
+          return self.doOauth2(oauth2, req, path, qs, posted, cookies)
+
+    if self.twitter['key']:
+      if path.startswith('/_authlite/twitter_login'):
+        return self.handleTwitterLogin(req, path, qs, posted, cookies)
+
+    return None
+
+  def doOauth2(self, oauth2, req, path, qs, posted, cookies):
+    code = qs.get('code', [None])[0]
+    args = {
+      'client_id': oauth2['client_id'], 
+      'redirect_uri': req.absolute_url(),
+    }
+    if code:
+      args.update({
+        'client_secret': oauth2['client_secret'],
+        'code': code,
+      })
+      token_url = oauth2['token_url'] + urllib.urlencode(args)
+      response = cgi.parse_qs(urllib.urlopen(token_url).read())
+      req.auth_info = (oauth2['name'], response['access_token'][-1])
+      return None
+    else:
+      auth_url = oauth2['auth_url'] + urllib.urlencode(args)
+      return req.sendResponse('<h1>Login!</h1>', code=302, msg='Moved',
+                              cachectrl='no-cache',
+                              header_list=[('Location', auth_url)])
+
+  def getFacebookProfile(self, access_token):
+    import json
+    args = {'access_token': access_token}
+    graph_url = self.facebook['graph_url'] + urllib.urlencode(args)
+    return json.load(urllib.urlopen(graph_url))
+
+  def handleTwitterLogin(self, req, path, qs, posted, cookies):
+    pass
 
 
 class XmlRpcInterface:
@@ -268,7 +358,16 @@ class Boss:
   def handleHttpRequest(self, request_handler,
                               scheme, netloc, path, params, query, frag,
                               qs, posted, cookies):
-    request_handler.sendResponse('<h1>Hello world</h1>')
+    if request_handler.auth_info:
+      request_handler.sendResponse(('<h1>Welcome!</h1><p>%s</p>'
+                                    ) % (request_handler.auth_info, ),
+                                   cachectrl='no-cache')
+    else:
+      request_handler.sendResponse("""
+<h1>Hello world</h1>
+<p><a href='/_authlite/facebook'>Log in with Facebook?</a></p>
+<p><a href='/_authlite/google'>Log in with Google?</a></p>
+                                   """, cachectrl='no-cache')
 
 
 class Logger:
@@ -289,10 +388,12 @@ class Server(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
   def __init__(self, sspec, boss,
                handler=RequestHandler,
                logger=Logger,
-               xmlrpc=None):
+               xmlrpc=None,
+               auth_handler=None):
     SimpleXMLRPCServer.__init__(self, sspec, handler)
     self.boss = boss
     self.handler = handler
+    self.auth_handler = auth_handler
     self.logger = logger()
     if xmlrpc:
       self.xmlrpc = xmlrpc(boss)
@@ -309,5 +410,18 @@ class Server(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
 
 
 if __name__ == "__main__":
-  Server( ('localhost', 7890), Boss() ).serve_forever()
+  auth_handler = AuthHandler()
+  auth_handler.facebook.update({
+    'client_id': '188067404574891',
+    'client_secret': 'dc62a25223d0bffa96660d9be613caac'
+  })
+  auth_handler.google.update({
+    'client_id': '177344498952.apps.googleusercontent.com',
+    'client_secret': 'SIoxPXIC9r45EkmxsCdGoLXT',
+  })
+  Server(
+    ('localhost', 7890),
+    Boss(),
+    auth_handler=auth_handler
+  ).serve_forever()
 
