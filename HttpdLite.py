@@ -148,6 +148,13 @@ class RequestHandler(SimpleXMLRPCRequestHandler):
     if message and not self.suppress_body:
       self.sendChunk(message)
 
+  def sendRedirect(self, url, header_list=None):
+    headers = (header_list or [])[:]
+    headers.append('Location', url)
+    return self.sendResponse('<h1><a href="%s">Moved here</a></h1>\n' % url,
+                             code=302, msg='Moved', cachectrl='no-cache',
+                             header_list=headers)
+
   def do_HEAD(self):
     self.suppress_body = True
     self.do_GET(command='HEAD')
@@ -319,10 +326,7 @@ class AuthHandler:
       req.auth_info = (oauth2['name'], response['access_token'][-1])
       return None
     else:
-      auth_url = oauth2['auth_url'] + urllib.urlencode(args)
-      return req.sendResponse('<h1>Login!</h1>', code=302, msg='Moved',
-                              cachectrl='no-cache',
-                              header_list=[('Location', auth_url)])
+      return req.sendRedirect(oauth2['auth_url'] + urllib.urlencode(args))
 
   def getFacebookProfile(self, access_token):
     import json
