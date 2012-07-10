@@ -73,6 +73,7 @@ class RequestHandler(SimpleXMLRPCRequestHandler):
   rpc_paths = ( )
 
   def setup(self):
+    self.pending_headers = [ ]
     self.chunked = self.suppress_body = False
     SimpleXMLRPCRequestHandler.setup(self)
 
@@ -96,6 +97,19 @@ class RequestHandler(SimpleXMLRPCRequestHandler):
     else:
       return lasthop
 
+  def setCookie(self, name, value,
+                path='/', maxAge=None, httpOnly=False, secure=False,
+                delete=False):
+    if delete:
+      value, maxAge = '', 0
+    self.pending_headers.append(('Set-Cookie', ''.join([
+      '%s=%s' % (name, value),
+      '; Path=%s' % path,
+      (maxAge is not None) and ('; Max-Age=%s' % maxAge) or '',
+      (httpOnly and '; HttpOnly' or ''),
+      (secure and '; Secure' or '')
+    ])))
+
   def absolute_url(self):
     return '%s://%s%s' % (self.header('X-Forwarded-Proto', 'http'),
                           self.header('Host', 'localhost'),
@@ -107,6 +121,8 @@ class RequestHandler(SimpleXMLRPCRequestHandler):
       mimetype = 'application/octet-stream'
     if mimetype.startswith('text/') and ';' not in mimetype:
       mimetype += '; charset=utf-8'
+    for cookie in self.pending_headers:
+      self.send_header(*cookie)
     self.send_header('Cache-Control', cachectrl)
     self.send_header('Content-Type', mimetype)
     for header in header_list:
@@ -150,7 +166,7 @@ class RequestHandler(SimpleXMLRPCRequestHandler):
 
   def sendRedirect(self, url, header_list=None):
     headers = (header_list or [])[:]
-    headers.append('Location', url)
+    headers.append(('Location', url))
     return self.sendResponse('<h1><a href="%s">Moved here</a></h1>\n' % url,
                              code=302, msg='Moved', cachectrl='no-cache',
                              header_list=headers)
