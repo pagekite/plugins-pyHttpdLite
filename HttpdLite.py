@@ -41,6 +41,18 @@ import Cookie
 import SocketServer
 from SimpleXMLRPCServer import SimpleXMLRPCServer, SimpleXMLRPCRequestHandler
 
+try:
+  import json
+  if hasattr(json, 'JsonReader'):
+    def json_decode(data):           return json.JsonReader().read(data)
+    def json_encode(data, indent=0): return json.JsonWriter().write(data)
+  else:
+    def json_decode(data):           return json.loads(data, indent=indent)
+    def json_encode(data, indent=0): return json.dumps(data, indent=indent)
+except:
+  def json_decode(data):           raise ImportError("Failed to import json")
+  def json_encode(data, indent=0): raise ImportError("Failed to import json")
+
 
 def GuessMimeType(path):
   if '.' in os.path.basename(path):
@@ -349,10 +361,9 @@ class AuthHandler:
       return req.sendRedirect(oauth2['auth_url'] + urllib.urlencode(args))
 
   def getFacebookProfile(self, access_token):
-    import json
     args = {'access_token': access_token}
     graph_url = self.facebook['graph_url'] + urllib.urlencode(args)
-    return json.load(urllib.urlopen(graph_url))
+    return json_decode(urllib.urlopen(graph_url).read())
 
   def handleTwitterLogin(self, req, path, qs, posted, cookies):
     pass
