@@ -31,7 +31,11 @@ import threading
 import time
 import traceback
 import urllib
-from urlparse import urlparse, parse_qs
+from urlparse import urlparse
+try:
+  from urlparse import parse_qs
+except ImportError:
+  from cgi import parse_qs
 
 import Cookie
 import SocketServer
