@@ -47,7 +47,7 @@ try:
     def json_decode(data):           return json.JsonReader().read(data)
     def json_encode(data, indent=0): return json.JsonWriter().write(data)
   else:
-    def json_decode(data):           return json.loads(data, indent=indent)
+    def json_decode(data):           return json.loads(data)
     def json_encode(data, indent=0): return json.dumps(data, indent=indent)
 except:
   def json_decode(data):           raise ImportError("Failed to import json")
@@ -67,6 +67,8 @@ def GuessMimeType(path):
       return 'image/jpeg'
     elif ext in ('png', 'gif'):
       return 'image/%s' % ext
+    elif ext in ('ico', ):
+      return 'image/x-icon'
     elif ext in ('htm', 'html', 'html.gz', 'htm.gz'):
       return 'text/html'
     elif ext in ('css', 'css.gz'):
