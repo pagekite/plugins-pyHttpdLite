@@ -270,8 +270,10 @@ class RequestHandler(SimpleXMLRPCRequestHandler):
         # We wrap the XMLRPC request handler in _BEGIN/_END in order to
         # expose the request environment to the RPC functions.
         rci = self.server.xmlrpc
-        return rci._END(SimpleXMLRPCRequestHandler.do_POST(rci._BEGIN(self)))
-
+        try:
+          return SimpleXMLRPCRequestHandler.do_POST(rci._BEGIN(self))
+        finally:
+          rci._END()
       else:
         posted = {}
         posted[command.upper()] = self.rfile.read(clength)
