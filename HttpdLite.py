@@ -88,6 +88,9 @@ def GuessMimeType(path):
 
 class RequestHandler(SimpleXMLRPCRequestHandler):
 
+  POST_MAX = 2 * 1024 * 1024 * 1024
+  POST_UE_MAX = 25 * 1024 * 1024
+
   rpc_paths = ( )
 
   def setup(self):
@@ -220,6 +223,9 @@ class RequestHandler(SimpleXMLRPCRequestHandler):
   def header(self, name, default=None):
     return self.headers.get(name) or self.headers.get(name.lower()) or default
 
+  def post_progress(self, uid, path, pending, total, error=None):
+    """Override this to receive updates on upload progress."""
+
   def do_POST(self, command='POST'):
     (scheme, netloc, path, params, query, frag) = urlparse(self.path)
     qs = parse_qs(query)
@@ -229,11 +235,21 @@ class RequestHandler(SimpleXMLRPCRequestHandler):
     self.old_rfile = self.rfile
     try:
       # First, buffer the POST data to a file...
+      uid = 1234
       clength = cleft = int(self.header('Content-Length'))
-      while cleft > 0:
-        rbytes = min(64*1024, cleft)
-        self.post_data.write(self.rfile.read(rbytes))
-        cleft -= rbytes
+      if clength >= self.POST_MAX:
+        self.post_progress(uid, path, cleft, clength, error='toobig')
+        raise Exception(("Refusing to accept giant posted data (%s bytes)."
+                         ) % clength)
+      try:
+        while cleft > 0:
+          rbytes = min(64*1024, cleft)
+          self.post_data.write(self.rfile.read(rbytes))
+          cleft -= rbytes
+          self.post_progress(uid, path, cleft, clength)
+      except:
+        self.post_progress(uid, path, cleft, clength, error='failed')
+        raise
 
       # Juggle things so the buffering is invisble.
       self.post_data.seek(0)
@@ -245,7 +261,7 @@ class RequestHandler(SimpleXMLRPCRequestHandler):
         posted = cgi.parse_multipart(self.rfile, pdict)
 
       elif ctype == 'application/x-www-form-urlencoded':
-        if clength >= 50*1024*1024:
+        if clength >= self.POST_UE_MAX:
           raise Exception(("Refusing to parse giant posted query "
                            "string (%s bytes).") % clength)
         posted = cgi.parse_qs(self.rfile.read(clength), 1)
