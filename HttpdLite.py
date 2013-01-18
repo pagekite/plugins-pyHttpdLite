@@ -86,10 +86,23 @@ def GuessMimeType(path):
   return 'text/plain'
 
 
+class FieldStorage(cgi.FieldStorage):
+
+  # This is a persistent cache of who our boss is.
+  RB = [None]
+
+  def __init__(self, *args, **kwargs):
+    if 'boss'in kwargs: self.RB[0] = kwargs.pop('boss')
+    self.boss = self.RB[0]
+
+    cgi.FieldStorage.__init__(self, *args, **kwargs)
+
+
 class RequestHandler(SimpleXMLRPCRequestHandler):
 
   POST_MAX = 2 * 1024 * 1024 * 1024
   POST_UE_MAX = 25 * 1024 * 1024
+  FIELDSTORAGE = FieldStorage
 
   rpc_paths = ( )
 
@@ -237,6 +250,8 @@ class RequestHandler(SimpleXMLRPCRequestHandler):
       # First, buffer the POST data to a file...
       uid = 1234
       clength = cleft = int(self.header('Content-Length'))
+
+      # FIXME: Assume data goes to disk, check how much space we have left?
       if clength >= self.POST_MAX:
         self.post_progress(uid, path, cleft, clength, error='toobig')
         raise Exception(("Refusing to accept giant posted data (%s bytes)."
@@ -258,7 +273,13 @@ class RequestHandler(SimpleXMLRPCRequestHandler):
       ctype, pdict = cgi.parse_header(self.header('Content-Type', ''))
       if ctype == 'multipart/form-data':
         self.post_data.seek(0)
-        posted = cgi.parse_multipart(self.rfile, pdict)
+        posted = self.FIELDSTORAGE(
+          boss=self.server.boss,
+          fp=self.rfile,
+          headers=self.headers,
+          environ={'REQUEST_METHOD': 'POST',
+                   'CONTENT_TYPE': self.headers['Content-Type']}
+        )
 
       elif ctype == 'application/x-www-form-urlencoded':
         if clength >= self.POST_UE_MAX:
