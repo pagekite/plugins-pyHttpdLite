@@ -109,7 +109,12 @@ class RequestHandler(SimpleXMLRPCRequestHandler):
   def setup(self):
     self.pending_headers = [ ]
     self.chunked = self.suppress_body = False
-    SimpleXMLRPCRequestHandler.setup(self)
+    if self.server.enable_ssl:
+      self.connection = self.request
+      self.rfile = socket._fileobject(self.request, "rb", self.rbufsize)
+      self.wfile = socket._fileobject(self.request, "wb", self.wbufsize)
+    else:
+      SimpleXMLRPCRequestHandler.setup(self)
 
   def send_header(self, header, value):
     self.wfile.write('%s: %s\r\n' % (header, value))
@@ -467,7 +472,9 @@ class Server(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
                handler=RequestHandler,
                logger=Logger,
                xmlrpc=None,
-               auth_handler=None):
+               auth_handler=None,
+               ssl_pem_filename=None,
+               ssl_context=None):
     SimpleXMLRPCServer.__init__(self, sspec, handler)
     self.boss = boss
     self.handler = handler
@@ -479,6 +486,18 @@ class Server(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
       self.register_instance(self.xmlrpc)
     else:
       self.xmlrpc = None
+    if ssl_pem_filename and ssl_context:
+      ctx = ssl_context(socks.SSL.TLSv1_METHOD)
+      ctx.use_privatekey_file (ssl_pem_filename)
+      ctx.use_certificate_chain_file(ssl_pem_filename)
+      self.socket = socks.SSL_Connect(ctx, socket.socket(self.address_family,
+                                                         self.socket_type),
+                                         server_side=True)
+      self.server_bind()
+      self.server_activate()
+      self.enable_ssl = True
+    else:
+      self.enable_ssl = False
 
   def finish_request(self, request, client_address):
    try:
