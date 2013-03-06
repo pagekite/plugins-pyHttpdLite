@@ -264,9 +264,13 @@ class RequestHandler(SimpleXMLRPCRequestHandler):
       try:
         while cleft > 0:
           rbytes = min(64*1024, cleft)
-          self.post_data.write(self.rfile.read(rbytes))
-          cleft -= rbytes
-          self.post_progress(uid, path, cleft, clength)
+          data = self.rfile.read(rbytes)
+          if len(data) == 0:
+            raise IOError('Premature EOF')
+          else:
+            self.post_data.write(data)
+            cleft -= len(data)
+            self.post_progress(uid, path, cleft, clength)
       except:
         self.post_progress(uid, path, cleft, clength, error='failed')
         raise
